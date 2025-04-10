@@ -137,7 +137,7 @@ class _Overlay:
         # TODO
         logger.debug("edmcoverlay2: send_raw %s", repr(msg))
         self._overlays[msg.get("msgid") or msg.get("shapeid") or msg["id"]] = msg
-        if msg["ttl"] <= 0:
+        if not 'ttl' in msg or msg['ttl'] <= 0:
             del self._overlays[msg.get("msgid") or msg.get("shapeid") or msg["id"]]
         if not self._updater.is_alive():
             self._updater.start()
@@ -170,7 +170,7 @@ class _Overlay:
             assert color in ["red", "yellow", "blue", "green", "black"] or re.match("#[0-9a-fA-F]{6}", color)
             assert fill in ["red", "yellow", "blue", "green", "black"] or re.match("#[0-9a-fA-F]{6}", fill)
             assert ttl > 0
-            self._overlays[msgid] = {
+            self._overlays[shapeid] = {
                 "shape": shape,
                 "color": color,
                 "fill": fill,
