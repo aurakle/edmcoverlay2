@@ -68,9 +68,10 @@ class _Overlay:
                 # print("edmcoverlay2: the overlays are:", self._overlays)
                 had_overlays = True
             for id in list(self._overlays):
-                self._overlays[id]["ttl"] -= timestep
-                if self._overlays[id]["ttl"] <= 0:
-                    del self._overlays[id]
+                if "ttl" in self._overlays[id]:
+                    self._overlays[id]["ttl"] -= timestep
+                    if self._overlays[id]["ttl"] <= 0:
+                        del self._overlays[id]
             content = json.dumps([
                 {k: overlay[k] for k in [
                     "x", "y", "color", "text", "size", "shape", "fill", "w", "h", "vector"
