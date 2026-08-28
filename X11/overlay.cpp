@@ -164,6 +164,12 @@ void createShapedWindow() {
 
     g_win = XCreateWindow(g_display, root, window_xpos, window_ypos, window_width, window_height, 0, vinfo.depth, InputOutput, vinfo.visual, mask, &attr);
 
+	XClassHint* hint = XAllocClassHint();
+	hint->res_name = "edmcoverlay2";
+	hint->res_class = "edmcoverlay2";
+	XSetClassHint(g_display, g_win, hint);
+	XFree(hint);
+	
 	/* g_bitmap = XCreateBitmapFromData (g_display, RootWindow(g_display, g_screen), (char *)myshape_bits, myshape_width, myshape_height); */
 
     //XShapeCombineMask(g_display, g_win, ShapeBounding, 900, 500, g_bitmap, ShapeSet);
