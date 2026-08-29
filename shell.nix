@@ -8,6 +8,7 @@ let
     libXi
     libxkbcommon
     libGL
+    libxft
     libxcomposite
   ];
 in pkgs.mkShell {
