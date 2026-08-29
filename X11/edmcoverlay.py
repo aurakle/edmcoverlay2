@@ -138,7 +138,7 @@ class _Overlay:
         # TODO
         logger.debug("edmcoverlay2: send_raw %s", repr(msg))
         self._overlays[msg.get("msgid") or msg.get("shapeid") or msg["id"]] = msg
-        if msg["ttl"] <= 0:
+        if "ttl" in msg and msg["ttl"] <= 0:
             del self._overlays[msg.get("msgid") or msg.get("shapeid") or msg["id"]]
         if not self._updater.is_alive():
             self._updater.start()
