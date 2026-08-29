@@ -86,6 +86,7 @@ class _Overlay:
             except socket.error as e:
                 if e.errno == errno.ECONNREFUSED:
                     logger.warning("edmcoverlay2: conn refused")
+                    _stopping = True
                 else:
                     raise
         logger.info("edmcoverlay2: updater stopping")
