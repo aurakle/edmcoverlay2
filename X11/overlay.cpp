@@ -24,6 +24,7 @@
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <X11/Xatom.h>
+#include <X11/Xft/Xft.h>
 #include <X11/extensions/shape.h>
 #include <X11/extensions/Xcomposite.h>
 #include <X11/extensions/Xfixes.h>
@@ -50,21 +51,23 @@ unsigned short port = 5020;
 
 using namespace std;
 
-Display *g_display;
-int      g_screen;
-Window   g_win;
-int      g_disp_width;
-int      g_disp_height;
+Display    *g_display;
+XVisualInfo g_vinfo;
+int         g_screen;
+Window      g_win;
+XftDraw    *g_draw;
+int         g_disp_width;
+int         g_disp_height;
 /* Pixmap   g_bitmap; */
 Colormap g_colormap;
 
-XColor red;
-XColor green;
-XColor yellow;
-XColor blue;
-XColor black;
-XColor white;
-XColor transparent;
+XftColor red;
+XftColor green;
+XftColor yellow;
+XftColor blue;
+XftColor black;
+XftColor white;
+XftColor transparent; 
 
 std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
 std::chrono::high_resolution_clock::time_point t2 = std::chrono::high_resolution_clock::now();
@@ -101,51 +104,76 @@ void list_fonts() {
     }
 }
 // Create a XColor from 3 byte tuple (0 - 255, 0 - 255, 0 - 255).
-XColor createXColorFromRGB(short red, short green, short blue) {
-    XColor color;
+XftColor createXftColorFromRGB(short red, short green, short blue) {
+    XRenderColor color;
+    XftColor xft_color;
 
     // m_color.red = red * 65535 / 255;
     color.red = (red * 0xFFFF) / 0xFF;
     color.green = (green * 0xFFFF) / 0xFF;
     color.blue = (blue * 0xFFFF) / 0xFF;
-    color.flags = DoRed | DoGreen | DoBlue;
+    color.alpha = 0xFFFF;
 
-    if (!XAllocColor(g_display, DefaultColormap(g_display, g_screen), &color)) {
-        std::cerr << "createXColorFromRGB: Cannot create color" << endl;
+    if (!XftColorAllocValue(g_display, DefaultVisual(g_display, g_screen), g_colormap, &color, &xft_color)) {
+        std::cerr << "createXftColorFromRGB: Cannot create color" << endl;
         exit(-1);
     }
-    return color;
+    return xft_color;
 }
 // Create a XColor from 3 byte tuple (0 - 255, 0 - 255, 0 - 255).
-XColor createXColorFromRGBA(short red, short green, short blue, short alpha) {
-    XColor color;
+XftColor createXftColorFromRGBA(short red, short green, short blue, short alpha) {
+    XRenderColor color;
+    XftColor xft_color;
 
     // m_color.red = red * 65535 / 255;
     color.red = (red * 0xFFFF) / 0xFF;
     color.green = (green * 0xFFFF) / 0xFF;
     color.blue = (blue * 0xFFFF) / 0xFF;
-    color.flags = DoRed | DoGreen | DoBlue;
+    color.alpha = (alpha * 0xFFFF) / 0xFF;
 
-    if (!XAllocColor(g_display, DefaultColormap(g_display, g_screen), &color)) {
-        std::cerr << "createXColorFromRGB: Cannot create color" << endl;
+    if (!XftColorAllocValue(g_display, DefaultVisual(g_display, g_screen), g_colormap, &color, &xft_color)) {
+        std::cerr << "createXftColorFromRGB: Cannot create color" << endl;
         exit(-1);
     }
-
-    *(&color.pixel) = ((*(&color.pixel)) & 0x00ffffff) | (alpha << 24);
+    return xft_color;
+}
+XftColor parse_color(char* color_code) {
+    XftColor color;
+    if (color_code[0] == '#') {
+        if (strlen(color_code) == 7)  {
+            unsigned int r, g, b;
+            sscanf(color_code, "#%2x%2x%2x", &r, &g, &b);
+            color = createXftColorFromRGBA(r, g, b, 255);
+        } else if (strlen(color_code) == 9) {
+            unsigned int r, g, b, a;
+            sscanf(color_code, "#%2x%2x%2x%2x", &a, &r, &g, &b);
+            color = createXftColorFromRGBA(r, g, b, a);
+        }
+    } else if (strcmp(color_code, "red") == 0) {
+        color = red;
+    } else if (strcmp(color_code, "green") == 0) {
+        color = green;
+    } else if (strcmp(color_code, "yellow") == 0) {
+        color = yellow;
+    } else if (strcmp(color_code, "blue") == 0) {
+        color = blue;
+    } else if (strcmp(color_code, "black") == 0) {
+        color = black;
+    } else {
+        color = white;
+    }
     return color;
 }
-
 // Create a window
 void createShapedWindow() {
     XSetWindowAttributes wattr;
-    XColor bgcolor = createXColorFromRGBA(0, 0, 0, 0);
+    XftColor bgcolor = createXftColorFromRGBA(0, 0, 0, 0);
 
     Window root    = DefaultRootWindow(g_display);
     Visual *visual = DefaultVisual(g_display, g_screen);
 
-    XVisualInfo vinfo;
-    XMatchVisualInfo(g_display, DefaultScreen(g_display), 32, TrueColor, &vinfo);
-    g_colormap = XCreateColormap(g_display, DefaultRootWindow(g_display), vinfo.visual, AllocNone);
+    XMatchVisualInfo(g_display, DefaultScreen(g_display), 32, TrueColor, &g_vinfo);
+    g_colormap = XCreateColormap(g_display, DefaultRootWindow(g_display), g_vinfo.visual, AllocNone);
 
     XSetWindowAttributes attr;
     attr.background_pixmap = None;
@@ -159,10 +187,9 @@ void createShapedWindow() {
     attr.override_redirect=1; // OpenGL > 0
     attr.colormap = g_colormap;
 
-    //unsigned long mask = CWBackPixel|CWBorderPixel|CWWinGravity|CWBitGravity|CWSaveUnder|CWEventMask|CWDontPropagate|CWOverrideRedirect;
     unsigned long mask = CWColormap | CWBorderPixel | CWBackPixel | CWEventMask | CWWinGravity|CWBitGravity | CWSaveUnder | CWDontPropagate | CWOverrideRedirect;
 
-    g_win = XCreateWindow(g_display, root, window_xpos, window_ypos, window_width, window_height, 0, vinfo.depth, InputOutput, vinfo.visual, mask, &attr);
+    g_win = XCreateWindow(g_display, root, window_xpos, window_ypos, window_width, window_height, 0, g_vinfo.depth, InputOutput, g_vinfo.visual, mask, &attr);
 
 	XClassHint* hint = XAllocClassHint();
 	hint->res_name = "edmcoverlay2";
@@ -187,13 +214,13 @@ void createShapedWindow() {
     // Show the window
     XMapWindow(g_display, g_win);
 
-    red = createXColorFromRGBA(255, 0, 0, 255);
-    green = createXColorFromRGBA(0, 255, 0, 255);
-    yellow = createXColorFromRGBA(255, 255, 0, 255);
-    blue = createXColorFromRGBA(0, 0, 255, 255);
-    black = createXColorFromRGBA(0, 0, 0, 100);
-    white = createXColorFromRGBA(255, 255, 255, 255);
-    transparent = createXColorFromRGBA(0, 0, 0, 0);
+    red = createXftColorFromRGBA(255, 0, 0, 255);
+    green = createXftColorFromRGBA(0, 255, 0, 255);
+    yellow = createXftColorFromRGBA(255, 255, 0, 255);
+    blue = createXftColorFromRGBA(0, 0, 255, 255);
+    black = createXftColorFromRGBA(0, 0, 0, 100);
+    white = createXftColorFromRGBA(255, 255, 255, 255);
+    transparent = createXftColorFromRGBA(0, 0, 0, 0);
 }
 
 
@@ -257,10 +284,12 @@ void sighandler(int signum) {
     cout << "edmcoverlay2: got signal " << signum << endl;
     if ((signum == SIGINT) || (signum == SIGTERM)) {
         cout << "edmcoverlay2: SIGINT/SIGTERM, exiting" << endl;
+        XftDrawDestroy(g_draw);
+        XDestroyWindow(g_display, g_win);
+        XCloseDisplay(g_display);
         exit(0);
     }
 }
-
 
 int main(int argc, char* argv[]) {
     if (argc != 5) {
@@ -272,11 +301,11 @@ int main(int argc, char* argv[]) {
     window_width = atoi(argv[3]);
     window_height = atoi(argv[4]);
     cout << "edmcoverlay2: overlay starting up..." << endl;
+    openDisplay();
+    createShapedWindow();
+    g_draw = XftDrawCreate(g_display, g_win, g_vinfo.visual, g_colormap);
     signal(SIGINT, sighandler);
     signal(SIGTERM, sighandler);
-    openDisplay();
-
-    createShapedWindow();
 
     tcp_server_t server(port);
 
@@ -287,18 +316,17 @@ int main(int argc, char* argv[]) {
         XSetBackground(g_display, gc, white.pixel);
         XSetForeground(g_display, gc, transparent.pixel);
         XFillRectangle(g_display, g_win, gc, 0, 0, window_width, window_height);
-        const char* fontname = "9x15bold";
-        XFontStruct* normalfont = XLoadQueryFont(g_display, fontname);
-        if (!normalfont) {
-            fprintf(stderr, "unable to load font %s > using fixed\n", fontname);
-            normalfont = XLoadQueryFont(g_display, "fixed");
-        }
+        const char *fontname = "Open Sans";
+        XftFont *normalfont = XftFontOpen(g_display, g_screen,
+            XFT_FAMILY, XftTypeString, fontname,
+            XFT_SIZE, XftTypeDouble, 14.0,
+            NULL);
         XSetForeground(g_display, gc, black.pixel);
         XFillRectangle(g_display, g_win, gc, 0, 0, 250, 100);
         const char* text = "edmcoverlay2 overlay process: running!";
-        XSetForeground(g_display, gc, green.pixel);
-        XDrawString(g_display, g_win, gc, 10, 60, text, strlen(text));
-        XFreeFont(g_display, normalfont);
+        const unsigned char* utext = reinterpret_cast<const unsigned char *>(text);
+        XftDrawStringUtf8(g_draw, &green, normalfont, SCALE_X(0), SCALE_Y(0) - 10, utext, strlen(text));
+        XftFontClose(g_display, normalfont);
         XFreeGC(g_display, gc);
         XFlush(g_display);
     }
@@ -326,26 +354,28 @@ int main(int argc, char* argv[]) {
         gc = XCreateGC(g_display, g_win, 0, 0);
         XSetBackground(g_display, gc, white.pixel);
 
-        const char* fontname = "9x15bold";
-        XFontStruct* normalfont = XLoadQueryFont(g_display, fontname);
-        if (!normalfont) {
-            fprintf(stderr, "unable to load font %s > using fixed\n", fontname);
-            normalfont = XLoadQueryFont(g_display, "fixed");
-        }
-        fontname = "12x24";
-        XFontStruct* largefont = XLoadQueryFont(g_display, fontname);
-        if (!largefont) {
-            fprintf(stderr, "unable to load font %s > using fixed\n", fontname);
-            largefont = XLoadQueryFont(g_display, "fixed");
-        }
+        const char *fontname = "Open Sans";
+        XftFont *normalfont = XftFontOpen(g_display, g_screen,
+            XFT_FAMILY, XftTypeString, fontname,
+            XFT_SIZE, XftTypeDouble, 14.0,
+            NULL);
+        fontname = "Open Sans";
+        const char *fontstyle = "Bold";
+        XftFont *largefont = XftFontOpen(g_display, g_screen,
+            XFT_FAMILY, XftTypeString, fontname,
+            XFT_STYLE, XftTypeString, fontstyle,
+            XFT_SIZE, XftTypeDouble, 20.0,
+            NULL
+        );
 
         XSetForeground(g_display, gc, transparent.pixel);
         XFillRectangle(g_display, g_win, gc, 0, 0, window_width, window_height);
         XSetForeground(g_display, gc, black.pixel);
         XFillRectangle(g_display, g_win, gc, 0, 0, 200, 50);
         XSetForeground(g_display, gc, white.pixel);
-	const char* version = "edmcoverlay2 running";
-	XDrawString(g_display, g_win, gc, SCALE_X(0), SCALE_Y(0) - 10, version, strlen(version));
+        const char* version = "edmcoverlay2 running";
+        const unsigned char* u_text = reinterpret_cast<const unsigned char *>(version);
+        XftDrawStringUtf8(g_draw, &white, normalfont, SCALE_X(0), SCALE_Y(0) - 10, u_text, strlen(version));
 
         int n = 0;
         for (auto v : value) {
@@ -358,6 +388,7 @@ int main(int argc, char* argv[]) {
             * size: "normal", "large"
             */
             drawitem_t drawitem;
+            XftColor main_color;
             for (JsonNode* node = v->value.toNode(); node != nullptr; node = node->next) {
                 /* cout << "got key: " << node->key << endl; */
                 // common
@@ -398,48 +429,17 @@ int main(int argc, char* argv[]) {
 
             if (drawitem.text.drawmode == drawmode_t::text) {
                 /* cout << "edmcoverlay2: drawing a text" << endl; */
+                main_color = parse_color(drawitem.text.color);
+                u_text = reinterpret_cast<const unsigned char *>(drawitem.text.text);
                 if (strcmp(drawitem.text.size, "large") == 0) {
-                    XSetFont(g_display, gc, largefont->fid);
+                    XftDrawStringUtf8(g_draw, &main_color, largefont, SCALE_X(drawitem.text.x), SCALE_Y(drawitem.text.y), u_text, strlen(drawitem.text.text));
                 } else {
-                    XSetFont(g_display, gc, normalfont->fid);
+                    XftDrawStringUtf8(g_draw, &main_color, normalfont, SCALE_X(drawitem.text.x), SCALE_Y(drawitem.text.y), u_text, strlen(drawitem.text.text));
                 }
-                if (drawitem.text.color[0] == '#') {
-                    unsigned int r, g, b;
-                    sscanf(drawitem.text.color, "#%02x%02x%02x", &r, &g, &b);
-                    XSetForeground(g_display, gc, createXColorFromRGBA(r, g, b, 255).pixel);
-                } else if (strcmp(drawitem.text.color, "red") == 0) {
-                    XSetForeground(g_display, gc, red.pixel);
-                } else if (strcmp(drawitem.text.color, "green") == 0) {
-                    XSetForeground(g_display, gc, green.pixel);
-                } else if (strcmp(drawitem.text.color, "yellow") == 0) {
-                    XSetForeground(g_display, gc, yellow.pixel);
-                } else if (strcmp(drawitem.text.color, "blue") == 0) {
-                    XSetForeground(g_display, gc, blue.pixel);
-                } else if (strcmp(drawitem.text.color, "black") == 0) {
-                    XSetForeground(g_display, gc, black.pixel);
-                } else {
-                    XSetForeground(g_display, gc, white.pixel);
-                }
-                XDrawString(g_display, g_win, gc, SCALE_X(drawitem.text.x), SCALE_Y(drawitem.text.y), drawitem.text.text, strlen(drawitem.text.text));
             } else {
                 /* cout << "edmcoverlay2: drawing a shape" << endl; */
-                if (drawitem.shape.color[0] == '#') {
-                    unsigned int r, g, b;
-                    sscanf(drawitem.shape.color, "#%02x%02x%02x", &r, &g, &b);
-                    XSetForeground(g_display, gc, createXColorFromRGBA(r, g, b, 255).pixel);
-                } else if (strcmp(drawitem.shape.color, "red") == 0) {
-                    XSetForeground(g_display, gc, red.pixel);
-                } else if (strcmp(drawitem.shape.color, "green") == 0) {
-                    XSetForeground(g_display, gc, green.pixel);
-                } else if (strcmp(drawitem.shape.color, "yellow") == 0) {
-                    XSetForeground(g_display, gc, yellow.pixel);
-                } else if (strcmp(drawitem.shape.color, "blue") == 0) {
-                    XSetForeground(g_display, gc, blue.pixel);
-                } else if (strcmp(drawitem.shape.color, "black") == 0) {
-                    XSetForeground(g_display, gc, black.pixel);
-                } else {
-                    XSetForeground(g_display, gc, white.pixel);
-                }
+                main_color = parse_color(drawitem.shape.color);
+                XSetForeground(g_display, gc, main_color.pixel);
                 if (strcmp(drawitem.shape.shape, "rect") == 0) {
                     /* cout << "edmcoverlay2: specifically, a rect" << endl; */
                     // TODO distinct fill/edge colour
@@ -479,18 +479,30 @@ int main(int argc, char* argv[]) {
                     }
                 }
             }
+            XftColorFree(g_display, g_vinfo.visual, g_colormap, &main_color);
         }
 
         /* cout << "edmcoverlay2: done drawing " << std::to_string(n) << " graphics" << endl; */
 
-        XFreeFont(g_display, normalfont);
-        XFreeFont(g_display, largefont);
         XFreeGC(g_display, gc);
         XFlush(g_display);
+        
+        XftFontClose(g_display, normalfont);
+        XftFontClose(g_display, largefont);
 
         free(request2);
         socket.close();
     }
+    XftDrawDestroy(g_draw);
+    XDestroyWindow(g_display, g_win);
+    XftColorFree(g_display, g_vinfo.visual, g_colormap, &red);
+    XftColorFree(g_display, g_vinfo.visual, g_colormap, &green);
+    XftColorFree(g_display, g_vinfo.visual, g_colormap, &yellow);
+    XftColorFree(g_display, g_vinfo.visual, g_colormap, &blue);
+    XftColorFree(g_display, g_vinfo.visual, g_colormap, &black);
+    XftColorFree(g_display, g_vinfo.visual, g_colormap, &white);
+    XftColorFree(g_display, g_vinfo.visual, g_colormap, &transparent);
+    XCloseDisplay(g_display);
     server.close();
     return 0;
 }
