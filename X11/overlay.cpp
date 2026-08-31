@@ -279,6 +279,7 @@ int main(int argc, char* argv[]) {
     createShapedWindow();
 
     tcp_server_t server(port);
+    XFontSet font_set = XCreateFontSet(g_display, "monospace", NULL, NULL, NULL);
 
     {
         GC gc;
@@ -297,7 +298,7 @@ int main(int argc, char* argv[]) {
         XFillRectangle(g_display, g_win, gc, 0, 0, 250, 100);
         const char* text = "edmcoverlay2 overlay process: running!";
         XSetForeground(g_display, gc, green.pixel);
-        XDrawString(g_display, g_win, gc, 10, 60, text, strlen(text));
+        Xutf8DrawString(g_display, g_win, font_set, gc, 10, 60, text, strlen(text));
         XFreeFont(g_display, normalfont);
         XFreeGC(g_display, gc);
         XFlush(g_display);
@@ -344,8 +345,8 @@ int main(int argc, char* argv[]) {
         XSetForeground(g_display, gc, black.pixel);
         XFillRectangle(g_display, g_win, gc, 0, 0, 200, 50);
         XSetForeground(g_display, gc, white.pixel);
-	const char* version = "edmcoverlay2 running";
-	XDrawString(g_display, g_win, gc, SCALE_X(0), SCALE_Y(0) - 10, version, strlen(version));
+        const char* version = "edmcoverlay2 running";
+        Xutf8DrawString(g_display, g_win, font_set, gc, SCALE_X(0), SCALE_Y(0) - 10, version, strlen(version));
 
         int n = 0;
         for (auto v : value) {
@@ -420,7 +421,7 @@ int main(int argc, char* argv[]) {
                 } else {
                     XSetForeground(g_display, gc, white.pixel);
                 }
-                XDrawString(g_display, g_win, gc, SCALE_X(drawitem.text.x), SCALE_Y(drawitem.text.y), drawitem.text.text, strlen(drawitem.text.text));
+                Xutf8DrawString(g_display, g_win, font_set, gc, SCALE_X(drawitem.text.x), SCALE_Y(drawitem.text.y), drawitem.text.text, strlen(drawitem.text.text));
             } else {
                 /* cout << "edmcoverlay2: drawing a shape" << endl; */
                 if (drawitem.shape.color[0] == '#') {
@@ -486,6 +487,7 @@ int main(int argc, char* argv[]) {
         XFreeFont(g_display, normalfont);
         XFreeFont(g_display, largefont);
         XFreeGC(g_display, gc);
+        XFreeFontSet(g_display, font_set);
         XFlush(g_display);
 
         free(request2);
