@@ -66,6 +66,8 @@ XColor black;
 XColor white;
 XColor transparent;
 
+XFontSet g_fontSet;
+
 std::chrono::high_resolution_clock::time_point t1 = std::chrono::high_resolution_clock::now();
 std::chrono::high_resolution_clock::time_point t2 = std::chrono::high_resolution_clock::now();
 int fpsmeterc = 0;
@@ -196,7 +198,6 @@ void createShapedWindow() {
     transparent = createXColorFromRGBA(0, 0, 0, 0);
 }
 
-
 void openDisplay() {
     g_display = XOpenDisplay(0);
 
@@ -217,6 +218,19 @@ void openDisplay() {
     }
 }
 
+void createFontSet() {
+    char **meow;
+    int meow2;
+    char *meow3;
+    XFontSet set = XCreateFontSet(g_display, "fixed", &meow, &meow2, &meow3);
+
+    if (set == nullptr) {
+        cerr << "Could not find fixed font?" << endl;
+        exit(-1);
+    }
+
+    g_fontSet = set;
+}
 
 enum class drawmode_t {
     idk,
@@ -275,11 +289,17 @@ int main(int argc, char* argv[]) {
     signal(SIGINT, sighandler);
     signal(SIGTERM, sighandler);
     openDisplay();
+    createFontSet();
+
+    cout << "edmcoverlay2: opened display" << endl;
 
     createShapedWindow();
 
     tcp_server_t server(port);
-    XFontSet font_set = XCreateFontSet(g_display, "monospace", NULL, NULL, NULL);
+
+    if (g_fontSet == NULL) {
+        cout << "edmcoverlay2: font not found" << endl;
+    }
 
     {
         GC gc;
@@ -298,7 +318,7 @@ int main(int argc, char* argv[]) {
         XFillRectangle(g_display, g_win, gc, 0, 0, 250, 100);
         const char* text = "edmcoverlay2 overlay process: running!";
         XSetForeground(g_display, gc, green.pixel);
-        Xutf8DrawString(g_display, g_win, font_set, gc, 10, 60, text, strlen(text));
+        Xutf8DrawString(g_display, g_win, g_fontSet, gc, 10, 60, text, strlen(text));
         XFreeFont(g_display, normalfont);
         XFreeGC(g_display, gc);
         XFlush(g_display);
@@ -346,7 +366,7 @@ int main(int argc, char* argv[]) {
         XFillRectangle(g_display, g_win, gc, 0, 0, 200, 50);
         XSetForeground(g_display, gc, white.pixel);
         const char* version = "edmcoverlay2 running";
-        Xutf8DrawString(g_display, g_win, font_set, gc, SCALE_X(0), SCALE_Y(0) - 10, version, strlen(version));
+        Xutf8DrawString(g_display, g_win, g_fontSet, gc, SCALE_X(0), SCALE_Y(0) - 10, version, strlen(version));
 
         int n = 0;
         for (auto v : value) {
@@ -421,7 +441,7 @@ int main(int argc, char* argv[]) {
                 } else {
                     XSetForeground(g_display, gc, white.pixel);
                 }
-                Xutf8DrawString(g_display, g_win, font_set, gc, SCALE_X(drawitem.text.x), SCALE_Y(drawitem.text.y), drawitem.text.text, strlen(drawitem.text.text));
+                Xutf8DrawString(g_display, g_win, g_fontSet, gc, SCALE_X(drawitem.text.x), SCALE_Y(drawitem.text.y), drawitem.text.text, strlen(drawitem.text.text));
             } else {
                 /* cout << "edmcoverlay2: drawing a shape" << endl; */
                 if (drawitem.shape.color[0] == '#') {
@@ -487,7 +507,6 @@ int main(int argc, char* argv[]) {
         XFreeFont(g_display, normalfont);
         XFreeFont(g_display, largefont);
         XFreeGC(g_display, gc);
-        XFreeFontSet(g_display, font_set);
         XFlush(g_display);
 
         free(request2);
