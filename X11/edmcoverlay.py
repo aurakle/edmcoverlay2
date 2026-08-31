@@ -149,7 +149,7 @@ class _Overlay:
         if not text or not color:
             self._overlays.pop(msgid, None)
         else:
-            assert color in ["red", "yellow", "blue", "green", "black"] or re.match("#[0-9a-fA-F]{6}", color)
+            assert color in ["red", "yellow", "blue", "green", "black"] or re.match("#([0-9a-fA-F]{8}|[0-9a-fA-F]{6})", color)
             assert ttl > 0
             assert size in ["normal", "large"]
             self._overlays[msgid] = {
@@ -169,8 +169,8 @@ class _Overlay:
             self._overlays.pop(shapeid, None)
         else:
             assert shape in ["rect", "vect"]
-            assert color in ["red", "yellow", "blue", "green", "black"] or re.match("#[0-9a-fA-F]{6}", color)
-            assert fill in ["red", "yellow", "blue", "green", "black"] or re.match("#[0-9a-fA-F]{6}", fill)
+            assert color in ["red", "yellow", "blue", "green", "black"] or re.match("#([0-9a-fA-F]{8}|[0-9a-fA-F]{6})", color)
+            assert fill in ["red", "yellow", "blue", "green", "black"] or re.match("#([0-9a-fA-F]{8}|[0-9a-fA-F]{6})", fill)
             assert ttl > 0
             self._overlays[msgid] = {
                 "shape": shape,
@@ -190,6 +190,9 @@ class Overlay:
     def __init__(self) -> None:
         self._token = secrets.token_hex(4)
         self._overlay = _Overlay()
+
+    def connect(self) -> None:
+        pass
 
     def send_raw(self, msg):
         if "msgid" in msg:
